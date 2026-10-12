@@ -2,7 +2,7 @@
 
 A [BepInEx](https://github.com/BepInEx/BepInEx) mod that raises the local multiplayer limit of Overcooked! 2 from four players to eight. Same kitchens, same recipes, same shared camera. The lobby, pause menu, input and chef spawning are extended to eight players.
 
-> **Status: prototype (v0.1.0).** It works end to end in my tests (lobby, level start, camera, pause, restart), but those tests used *simulated* controllers on one game build. Physical controllers 5 to 8, scoring, other game modes and online play are untested. Read [Status](#status) and [Known issues](#known-issues) before you install.
+> **Status: prototype (v0.1.1).** Co-op (Story tutorial, Arcade) and Versus were played end to end with eight players in my tests: lobby, level, camera, pickup, chop, plate, serve, score, pause, restart, quit, second session, results screen. Those tests used *simulated* controllers on one game build. Physical controllers 5 to 8, cooking and washing, the Chef tab, DLC levels and online play are untested or not working. Read [Status](#status) and [Known issues](#known-issues) before you install.
 
 ## Contents
 
@@ -30,6 +30,7 @@ A [BepInEx](https://github.com/BepInEx/BepInEx) mod that raises the local multip
 - Up to **8 local players**. Players 1 to 4 behave as in the base game.
 - **Lobby:** the join panel shows 8 slots in a 2×4 grid. The prompt reads "Player 5 Press A / Space to Join Locally", and so on.
 - **Levels:** chefs 5 to 8 are spawned next to the four chefs the kitchen already contains. All eight stay in the shared camera, which zooms out a little when more than four chefs are present.
+- **Game modes:** Story, Arcade (couch) and Versus (couch). In Versus the extra chefs are spawned per team, so 4 against 4 gets four chefs on each side.
 - **Pause menu:** all eight chefs are listed with their numbers and input devices.
 - **Chef colours:** players 5 to 8 reuse the four team colours (blue, red, green, yellow). The number badge tells same-coloured chefs apart. The ring under each chef matches the apron colour.
 - **Chef unlocks (optional):** every chef avatar can be shown as unlocked. This only changes what is displayed, never your save file. See [Configuration](#configuration).
@@ -37,27 +38,32 @@ A [BepInEx](https://github.com/BepInEx/BepInEx) mod that raises the local multip
 
 ## Status
 
-Everything below was checked in the running game on **one** build, with the keyboard as player 1 and players 2 to 8 driven by *simulated* controllers (virtual [InControl](https://github.com/pbhogan/InControl) devices that go through the game's normal input path).
+Everything below was checked in the running game on **one** build, with the keyboard as player 1 and players 2 to 8 driven by *simulated* controllers (virtual [InControl](https://github.com/pbhogan/InControl) devices that go through the game's normal input path). Where I moved a chef next to a station to test an action, I used the test commands described in [Testing without eight controllers](#testing-without-eight-controllers); the action itself (pickup, chop, serve) was a normal button press on that player's pad.
 
 | Area | Result |
 |---|---|
-| Mod loads, 5 IL patch steps apply, runtime patch classes apply | Verified for 25 of the 26 classes. The 26th (the unlock flag, see below) was added last and has not run in the game yet. |
+| Mod loads, 5 IL patch steps apply, 28 runtime patch classes apply | Verified (`ok=5 failed=0`, `ok=28 failed=0`) |
 | Lobby shows 8 slots, 8 players can join | Verified (simulated pads) |
 | Player counts 1 to 8: level loads, user count and chef count match, no exceptions | Verified (simulated pads) |
-| 8 chefs visible, camera frames all of them | Verified (screenshot) |
+| 8 chefs visible, camera frames all of them | Verified (screenshots, three different levels) |
 | Moving one controller moves only its own chef (tested on players 5 and 8) | Verified (simulated pads) |
+| Player 5: take lettuce from a crate, place it on a board, chop it, pick up `ChoppedLettuce` | Verified (log of the carried item after each step, screenshots) |
+| Player 8: take a plate, plate the chopped lettuce, serve it, score goes from 0 to 8 | Verified (log, screenshot of the HUD) |
 | Pause menu with 8 players, restart, extra chefs respawn | Verified (simulated pads) |
+| Quit to the main menu, start a second session, extra chefs spawn again | Verified (spawner ran twice, 8 chefs both times) |
+| Time's up and results screen with 8 players, co-op (stars, orders, total) | Verified (Arcade level "2-6") |
+| Versus: team select with 8 players, 4 against 4, match, results screen | Verified. Needed a fix in 0.1.1: before it, only 4 chefs spawned. |
+| Other levels | Verified: Story tutorial, Arcade "2-6" (mine), a Versus balloon level. DLC levels not tried. |
+| Controller unplugged during play, then re-attached | Verified: the game shows "Active profile removed", the new pad takes the free seat and moves that chef again |
+| Chef respawn after falling into a pit (players 5 to 8) | Verified after the 0.1.1 fix (see Changelog) |
 | 4-player game still loads with no extra chefs | Verified |
 | Chef ring colours for players 5 to 8 | Verified (screenshot) |
-| Picking up, chopping, cooking, washing, plating, serving with players 5 to 8 | **Not tested** |
-| Score screen, stars, level completion with 8 players | **Not tested** |
-| Quit to menu and start a second session | **Not tested** |
-| Other levels, Versus, Arcade and DLC levels | **Not tested** (only the Story tutorial level was loaded) |
-| Controller leave, reconnect, disconnect | **Not tested** |
-| Resolutions other than 1920×1080 | **Not tested** |
+| "Unlock all chefs" option | Verified: 60 chefs available with it on, 38 with it off |
+| Cooking and washing with players 5 to 8 | **Not tested.** I looked for a meat crate and a pan in two levels without finding a reliable setup. |
+| The Chef tab (chef selection screen) with 8 players | **Not working properly**, see [Known issues](#known-issues) |
+| Resolutions other than 1920×1080 | **Could not test.** The game ignored window-size arguments and registry values. Its UI is drawn on a fixed 1680×1050 canvas, so the layout should not change with resolution, but I did not see it. |
 | Physical controllers 5 to 8 | **Not tested** (no hardware) |
-| "Unlock all chefs" option | **Not tested in game** (it compiles and is a one-line change to a flag the game already reads) |
-| Online play | **Does not work** with unmodded players, see [Known issues](#known-issues) |
+| Online play | **Does not work** with unmodded players, see [Known issues](#known-issues). With eight local players the game itself blocks the online modes ("Too many local players to play this online mode"). |
 
 The full test notes are in [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md).
 
@@ -87,7 +93,7 @@ Compare yours with `Get-FileHash "<game folder>\Overcooked2_Data\Managed\Assembl
 ### Option A: installer script (recommended)
 
 1. **Close the game.**
-2. **Download** `OC2-EightPlayers-0.1.0.zip` from the [Releases page](../../releases) and unzip it anywhere, for example `Downloads\OC2-EightPlayers`.
+2. **Download** `OC2-EightPlayers-0.1.1.zip` from the [Releases page](../../releases) and unzip it anywhere, for example `Downloads\OC2-EightPlayers`.
 3. **Find your game folder**: the folder that contains `Overcooked2.exe`. For GOG Galaxy the default is usually `C:\Program Files (x86)\GOG Galaxy\Games\Overcooked! 2`. If you are not sure: open GOG Galaxy, pick the game, then *Manage installation → Show folder*.
 4. **Open PowerShell** in the unzipped folder (in Explorer: click the address bar, type `powershell`, press Enter).
 5. **Preview what the installer will do.** This changes nothing:
@@ -218,8 +224,10 @@ The mod never changes your save format. Still, the game saves on its own while y
 ## Known issues
 
 - **Online play is not supported.** Several network message layouts were widened (slot, colour and user-count bit widths) because even local play goes through the game's client/server message layer. A modded client cannot play online with an unmodded one. Online player limit stays at four. To play online, disable the mod (rename `winhttp.dll`).
-- **Chef colours repeat.** Players 5 to 8 share colours with 1 to 4. The shipped game has only four player colours.
+- **The Chef tab does not work for eight players.** On the main menu, Chef → Select Chef shows only about five chefs, with arrow pairs for four of them, so players 5 to 8 cannot pick their chef there. The positions of those 3D chefs are driven by the game's own animation, and my layout settings (`ChefX0`, `ChefDX`) have no effect on them (`ChefScale` does). Players 5 to 8 get a chef automatically instead, and the 8-player Versus and Arcade lobbies show every player's chef.
+- **Chef colours repeat.** Players 5 to 8 share colours with 1 to 4. The shipped game has four player colours. The plugin also tries to add four more hue-shifted colours, but I never saw them take effect in game.
 - **The van window shows four chef previews.** The lobby scene contains four preview models. Players 5 to 8 show in the slot grid but not as 3D previews.
+- **Versus was only played 4 against 4.** The extra chefs are spawned to match each team's size, but uneven teams (for example 5 against 3) were not tried.
 - **Extra chefs spawn beside the originals.** In tight kitchens they can overlap at the start and push each other apart. They respawn at the spot of the chef they were cloned from.
 - **4-player level data is reused.** Star thresholds and layouts are those of the 4-player version.
 - **Save data.** Eight-player runs write into the normal level record using the 4-player thresholds. No format change was made.
@@ -282,7 +290,7 @@ You need the .NET 8 SDK and your own game install. Nothing from the game is stor
 3. Make the release zip:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -GameDir "<game folder>" -Version 0.1.0
+   powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -GameDir "<game folder>" -Version 0.1.1
    ```
 
 You can also call `dotnet build -c Release src\Plugin /p:GameDir="<game folder>"` yourself. Set the `OC2_GAMEDIR` environment variable to avoid passing `GameDir` each time.
@@ -303,6 +311,14 @@ With the option on, the plugin watches `BepInEx\8p-sim.txt` (a quarter-second po
 | `log TEXT` | Write a marker line to the log |
 | `dump` | Log the user count and every chef (id, active state, position) |
 | `avatars` | Log how many chef avatars are currently unlocked |
+| `uistate` | Write the mod's UI state (lobby slots, chef menu, pause UI) to the log |
+| `find TEXT [n]` | List up to n active scene objects whose name contains TEXT, with world positions |
+| `state P` | Log position, facing and carried item of the chef of player P (0 is the keyboard player, 4 is player 5) |
+| `tp P X Y Z` | Teleport that chef. This is a test shortcut, not something the game offers. |
+| `tpface P X Y Z TX TZ` | Teleport the chef and turn it to look at the point (TX, TZ) |
+| `tpnear P TEXT [d]` | Put the chef at distance d (default 1.0) from the first object whose name contains TEXT, facing it |
+
+How the action tests worked: `tpface` placed a chef in front of a crate or board, then `press P A` (pick up or put down) and `press P X <seconds>` (chop) were normal button presses on that player's virtual pad, and `state` read what the chef was carrying afterwards. The tests that used `tp`, `tpface` or `tpnear` therefore prove that the buttons work for players 5 to 8, not that the player could walk there.
 
 Example: in the main menu, join seven virtual pads:
 

@@ -60,6 +60,35 @@ namespace OC2.EightPlayers
         }
     }
 
+    /// <summary>Scene helpers for the sim commands (test aid only).</summary>
+    static class SimWorld
+    {
+        public static float F(string s) { return float.Parse(s, System.Globalization.CultureInfo.InvariantCulture); }
+
+        public static PlayerIDProvider Chef(int playerId)
+        {
+            var all = PlayerIDProvider.s_AllProviders;
+            for (int i = 0; i < all.Count; i++)
+                if (all._items[i] != null && (int)all._items[i].GetID() == playerId) return all._items[i];
+            return null;
+        }
+
+        public static void Place(PlayerIDProvider chef, Vector3 pos)
+        {
+            chef.transform.position = pos;
+            var rb = chef.GetComponent<Rigidbody>();
+            if (rb != null) { rb.position = pos; rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+            Physics.SyncTransforms();
+        }
+
+        public static Transform FindDeep(Transform root, string name)
+        {
+            if (root.name == name) return root;
+            for (int i = 0; i < root.childCount; i++) { var r = FindDeep(root.GetChild(i), name); if (r != null) return r; }
+            return null;
+        }
+    }
+
     /// <summary>Polls BepInEx\8p-sim.txt (relative to the game folder) once a quarter second; each line is a command, then the file is emptied.
     ///   attach N            attach N virtual pads (numbered after the ones already attached)
     ///   detach I|all        detach pad I (1-based) or all
@@ -137,6 +166,9 @@ namespace OC2.EightPlayers
                 case "press":
                     host.StartCoroutine(Press(pads[int.Parse(t[1]) - 1], btn[t[2]], t.Length > 3 ? float.Parse(t[3], System.Globalization.CultureInfo.InvariantCulture) : 0.15f));
                     break;
+                case "uistate": // write the mod's UI state dump (slots, chef menu, pause UI) to the log
+                    UiDebug.LogState("sim");
+                    break;
                 case "all":
                     if (t[1].ToLowerInvariant() == "press")
                         foreach (var p in pads.ToArray()) host.StartCoroutine(Press(p, btn[t[2]], t.Length > 3 ? float.Parse(t[3], System.Globalization.CultureInfo.InvariantCulture) : 0.15f));
@@ -149,6 +181,60 @@ namespace OC2.EightPlayers
                 case "log":
                     Plugin.Log.LogInfo("[sim] MARK " + line.Substring(3).Trim());
                     break;
+                case "find":    // find SUBSTR [max]  : list active scene objects whose name contains SUBSTR, with world position
+                {
+                    string sub = t[1].ToLowerInvariant(); int max = t.Length > 2 ? int.Parse(t[2]) : 25, n = 0;
+                    foreach (var tr in UnityEngine.Object.FindObjectsOfType<Transform>())
+                    {
+                        if (!tr.gameObject.activeInHierarchy || !tr.name.ToLowerInvariant().Contains(sub)) continue;
+                        Plugin.Log.LogInfo("[sim] FIND '" + tr.name + "' pos=" + tr.position.ToString("F1") + " parent=" + (tr.parent != null ? tr.parent.name : "-"));
+                        if (++n >= max) break;
+                    }
+                    Plugin.Log.LogInfo("[sim] FIND done, " + n + " shown for '" + sub + "'");
+                    break;
+                }
+                case "tp":      // tp P X Y Z : teleport the chef of player id P (0 = keyboard player)
+                {
+                    var chef = SimWorld.Chef(int.Parse(t[1]));
+                    if (chef == null) { Plugin.Log.LogWarning("[sim] tp: no chef for player " + t[1]); break; }
+                    SimWorld.Place(chef, new Vector3(SimWorld.F(t[2]), SimWorld.F(t[3]), SimWorld.F(t[4])));
+                    break;
+                }
+                case "tpface":  // tpface P X Y Z TX TZ : place chef P at (X,Y,Z) looking toward (TX,TZ)
+                {
+                    var chef = SimWorld.Chef(int.Parse(t[1]));
+                    if (chef == null) { Plugin.Log.LogWarning("[sim] tpface: no chef for player " + t[1]); break; }
+                    var pos = new Vector3(SimWorld.F(t[2]), SimWorld.F(t[3]), SimWorld.F(t[4]));
+                    SimWorld.Place(chef, pos);
+                    chef.transform.rotation = Quaternion.LookRotation(new Vector3(SimWorld.F(t[5]) - pos.x, 0f, SimWorld.F(t[6]) - pos.z));
+                    break;
+                }
+                case "tpnear":  // tpnear P SUBSTR [dist] : put chef P next to the first object matching SUBSTR, facing it
+                {
+                    var chef = SimWorld.Chef(int.Parse(t[1]));
+                    if (chef == null) { Plugin.Log.LogWarning("[sim] tpnear: no chef for player " + t[1]); break; }
+                    string sub = t[2].ToLowerInvariant(); float dist = t.Length > 3 ? SimWorld.F(t[3]) : 1.0f;
+                    Transform target = null;
+                    foreach (var tr in UnityEngine.Object.FindObjectsOfType<Transform>())
+                        if (tr.gameObject.activeInHierarchy && tr.name.ToLowerInvariant().Contains(sub)) { target = tr; break; }
+                    if (target == null) { Plugin.Log.LogWarning("[sim] tpnear: nothing matches '" + sub + "'"); break; }
+                    Vector3 from = chef.transform.position - target.position; from.y = 0f;
+                    if (from.sqrMagnitude < 0.01f) from = Vector3.back;
+                    Vector3 pos = target.position + from.normalized * dist; pos.y = chef.transform.position.y;
+                    SimWorld.Place(chef, pos);
+                    chef.transform.rotation = Quaternion.LookRotation(new Vector3(target.position.x - pos.x, 0f, target.position.z - pos.z));
+                    Plugin.Log.LogInfo("[sim] tpnear: chef " + t[1] + " -> " + pos.ToString("F1") + " facing '" + target.name + "' at " + target.position.ToString("F1"));
+                    break;
+                }
+                case "state":   // state P : position, facing and carried item of chef P
+                {
+                    var chef = SimWorld.Chef(int.Parse(t[1]));
+                    if (chef == null) { Plugin.Log.LogWarning("[sim] state: no chef for player " + t[1]); break; }
+                    var hand = SimWorld.FindDeep(chef.transform, "Attachment");
+                    string carried = hand != null && hand.childCount > 0 ? hand.GetChild(0).name : "nothing";
+                    Plugin.Log.LogInfo("[sim] STATE chef " + t[1] + " pos=" + chef.transform.position.ToString("F1") + " fwd=" + chef.transform.forward.ToString("F1") + " carrying=" + carried);
+                    break;
+                }
                 case "avatars":
                 {
                     var meta = UnityEngine.Object.FindObjectOfType<MetaGameProgress>();

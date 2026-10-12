@@ -35,6 +35,20 @@ namespace OC2.EightPlayers
         }
     }
 
+    /// <summary>Versus uses CompetitiveKitchenLoaderManager, which does not override Awake, so the patch sits on the base
+    /// KitchenLoaderManager.Awake and only acts for the competitive loader (the campaign loader has its own patch above).</summary>
+    [HarmonyPatch(typeof(KitchenLoaderManager), "Awake")]
+    static class Patch_SpawnExtraChefsVersus
+    {
+        static void Postfix(KitchenLoaderManager __instance)
+        {
+            var competitive = __instance as CompetitiveKitchenLoaderManager;
+            if (competitive == null) return;
+            try { ExtraChefSpawner.RunCompetitive(competitive); }
+            catch (Exception e) { Plugin.Log.LogError("ExtraChefSpawner (versus) failed: " + e); }
+        }
+    }
+
     static class ExtraChefSpawner
     {
         public static void Run()
@@ -59,19 +73,70 @@ namespace OC2.EightPlayers
             int playersLayer = LayerMask.NameToLayer("Players");
             int groundMask = Physics.DefaultRaycastLayers & ~(playersLayer >= 0 ? (1 << playersLayer) : 0);
             int need = users - all.Length, firstId = all.Length;
-            for (int k = 0; k < need; k++)
+            for (int k = 0; k < need; k++) SpawnClone(templates[k % templates.Count], firstId + k, k, taken, groundMask);
+        }
+
+        /// <summary>Versus: every user needs a chef on their own team's side. The scene has 2 red + 2 blue chefs and
+        /// CompetitiveKitchenLoaderManager.AssignChefEntities hands chefs to team members in order, so with 4 per team the
+        /// two extra chefs of a team would be missing. Clone chefs per team until each team has as many as it has users, and
+        /// register the new ids in the loader's red/blue lists (otherwise AssignChefEntities puts every unknown id on team two).</summary>
+        public static void RunCompetitive(CompetitiveKitchenLoaderManager mgr)
+        {
+            if (!GameplayCfg.SpawnExtraChefs) return;
+            var userList = ClientUserSystem.m_Users;
+            int users = Math.Min(userList.Count, 8);
+            var all = UnityEngine.Object.FindObjectsOfType<PlayerIDProvider>();
+            Plugin.Log.LogInfo("[gameplay] ExtraChefSpawner(versus): users=" + users + " sceneChefs=" + all.Length);
+            if (users <= 4 || all.Length >= users) return;
+
+            // Final team sizes, replaying the loader's own auto-assignment of users that have no team yet.
+            int team1 = 0, team2 = 0, unassigned = 0;
+            for (int i = 0; i < users; i++)
             {
-                var tmpl = templates[k % templates.Count];
-                Transform t = tmpl.transform;
-                Vector3 pos = PickPosition(t.position, k, taken, groundMask);
-                var clone = UnityEngine.Object.Instantiate(tmpl.gameObject, pos, t.rotation, t.parent);
-                clone.name = "Player " + (firstId + k + 1);
-                var idp = clone.GetComponent<PlayerIDProvider>();
-                idp.OverridePlayerId((PlayerInputLookup.Player)(firstId + k));
-                taken.Add(pos);
-                Physics.SyncTransforms();
-                Plugin.Log.LogInfo("Spawned extra chef " + clone.name + " (id " + (firstId + k) + ") at " + pos + " near " + tmpl.name);
+                var team = userList._items[i].Team;
+                if (team == TeamID.One) team1++; else if (team == TeamID.Two) team2++; else unassigned++;
             }
+            for (int i = 0; i < unassigned; i++) { if (team1 == team2) team1++; else if (team1 > team2) team2++; else team1++; }
+
+            var redField = HarmonyLib.AccessTools.Field(typeof(CompetitiveKitchenLoaderManager), "m_redPlayersInScene");
+            var blueField = HarmonyLib.AccessTools.Field(typeof(CompetitiveKitchenLoaderManager), "m_bluePlayersInScene");
+            var red = new List<int>(); var blue = new List<int>();
+            foreach (var p in (PlayerInputLookup.Player[])redField.GetValue(mgr)) red.Add((int)p);
+            foreach (var p in (PlayerInputLookup.Player[])blueField.GetValue(mgr)) blue.Add((int)p);
+
+            var redTemplates = new List<PlayerIDProvider>(); var blueTemplates = new List<PlayerIDProvider>();
+            var taken = new List<Vector3>();
+            foreach (var c in all)
+            {
+                if (c == null) continue;
+                taken.Add(c.transform.position);
+                if (red.Contains((int)c.GetID())) redTemplates.Add(c); else if (blue.Contains((int)c.GetID())) blueTemplates.Add(c);
+            }
+            Plugin.Log.LogInfo("[gameplay] versus teams: users red=" + team1 + " blue=" + team2 + ", scene chefs red=" + red.Count + " blue=" + blue.Count);
+            if (redTemplates.Count == 0 || blueTemplates.Count == 0) { Plugin.Log.LogWarning("[gameplay] versus: no template chefs, not spawning"); return; }
+
+            int playersLayer = LayerMask.NameToLayer("Players");
+            int groundMask = Physics.DefaultRaycastLayers & ~(playersLayer >= 0 ? (1 << playersLayer) : 0);
+            int nextId = all.Length, k = 0;
+            for (int added = 0; red.Count < team1; added++, k++, nextId++) { SpawnClone(redTemplates[added % redTemplates.Count], nextId, k, taken, groundMask); red.Add(nextId); }
+            for (int added = 0; blue.Count < team2; added++, k++, nextId++) { SpawnClone(blueTemplates[added % blueTemplates.Count], nextId, k, taken, groundMask); blue.Add(nextId); }
+
+            redField.SetValue(mgr, red.ConvertAll(i => (PlayerInputLookup.Player)i).ToArray());
+            blueField.SetValue(mgr, blue.ConvertAll(i => (PlayerInputLookup.Player)i).ToArray());
+        }
+
+        static PlayerIDProvider SpawnClone(PlayerIDProvider tmpl, int newId, int k, List<Vector3> taken, int groundMask)
+        {
+            Transform t = tmpl.transform;
+            Vector3 pos = PickPosition(t.position, k, taken, groundMask);
+            var clone = UnityEngine.Object.Instantiate(tmpl.gameObject, pos, t.rotation, t.parent);
+            clone.name = "Player " + (newId + 1);
+            var idp = clone.GetComponent<PlayerIDProvider>();
+            idp.OverridePlayerId((PlayerInputLookup.Player)newId);
+            taken.Add(pos);
+            Physics.SyncTransforms();
+            Plugin.Log.LogInfo("Spawned extra chef " + clone.name + " (id " + newId + ") at " + pos + " near " + tmpl.name);
+            return idp;
         }
 
         // Search rings around the template chef's spawn for ground at (almost) the same height with a free capsule volume.
@@ -108,6 +173,15 @@ namespace OC2.EightPlayers
         {
             if (__result == null && index >= 4) __result = __instance.GetDefaultChef(index % 4);
         }
+    }
+
+    /// <summary>The "respawning in N" bubble above a chef that fell or died picks its background from a 4-entry sprite array indexed by
+    /// player number. For players 5..8 LateUpdate threw IndexOutOfRangeException on every frame (4392 log entries in one test after a
+    /// chef fell into a pit). Wrap the number like the ring colour; team modes index by team and are untouched.</summary>
+    [HarmonyPatch(typeof(RespawnCounterUIController), nameof(RespawnCounterUIController.SetPlayerNum))]
+    static class Patch_RespawnCounterWrap
+    {
+        static void Prefix(ref int _num) { if (_num >= 4) _num %= 4; }
     }
 
     /// <summary>The in-kitchen ring under each chef is the ThrowIndicators texture set, a 4-entry array indexed by player number

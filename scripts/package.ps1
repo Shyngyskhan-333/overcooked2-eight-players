@@ -1,12 +1,12 @@
 <#
   Builds the release zip: dist\OC2-EightPlayers-<version>.zip
-  Usage:   powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -GameDir "C:\path\to\Overcooked!_2" [-Version 0.1.0]
+  Usage:   powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -GameDir "C:\path\to\Overcooked!_2" [-Version 0.1.1]
   The zip contains only this project's own files: the two DLLs, install.ps1, uninstall.ps1, README.md, LICENSE, CHANGELOG.md.
   It contains no game files and no BepInEx (install.ps1 downloads BepInEx from its official release and verifies its SHA-256).
 #>
 param(
     [Parameter(Mandatory = $true)][string]$GameDir,
-    [string]$Version = '0.1.0',
+    [string]$Version = '0.1.1',
     [string]$BepInExCore = ''
 )
 $ErrorActionPreference = 'Stop'

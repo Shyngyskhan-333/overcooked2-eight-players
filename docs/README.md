@@ -14,3 +14,8 @@ They were written before and during in-game testing, so a few statements were ov
 | `MODDING_PLAN.md`, `RECON_REPORT.md` | Mention a sandbox copy and local tool folders | These were development-machine details and are not part of the repository. |
 
 `TEST_REPORT.md` lists exactly what was verified, and how.
+
+| Where | Note says | What turned out to be true (0.1.1 test pass) |
+|---|---|---|
+| `TEST_REPORT.md` first report | Pickup/chop/serve, score screen, quit/second session, other modes and controller reconnect "Untested" | Tested in the second pass, see the end of `TEST_REPORT.md`. Versus needed a fix; the respawn bubble crashed for players 5 to 8 until fixed. |
+| `subsystem_gameplay.md` | The extra-chef spawner covers every kitchen loader | Only the co-op loader. Versus has its own loader; it now has a per-team spawner. |

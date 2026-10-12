@@ -7,7 +7,7 @@ using HarmonyLib;
 
 namespace OC2.EightPlayers
 {
-    [BepInPlugin("local.oc2.eightplayers", "Overcooked 2 Eight Players", "0.1.0")]
+    [BepInPlugin("local.oc2.eightplayers", "Overcooked 2 Eight Players", "0.1.1")]
     public class Plugin : BaseUnityPlugin
     {
         internal static Plugin Instance;
