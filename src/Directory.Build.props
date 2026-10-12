@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    Build inputs come from YOUR game install (nothing from the game is stored in this repository).
+      GameDir      folder that contains Overcooked2.exe (pass /p:GameDir=... or set the OC2_GAMEDIR environment variable)
+      BepInExCore  folder with BepInEx.dll, 0Harmony.dll, Mono.Cecil.dll. Defaults to <GameDir>\BepInEx\core\
+                   (BepInEx 5.4.23.5 x64 must be unpacked there; scripts\install.ps1 does that).
+      Managed      defaults to <GameDir>\Overcooked2_Data\Managed\
+  -->
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">$(OC2_GAMEDIR)</GameDir>
+    <BepInExCore Condition="'$(BepInExCore)' == ''">$(GameDir)\BepInEx\core\</BepInExCore>
+    <Managed Condition="'$(Managed)' == ''">$(GameDir)\Overcooked2_Data\Managed\</Managed>
+    <BepInExCore Condition="!HasTrailingSlash('$(BepInExCore)')">$(BepInExCore)\</BepInExCore>
+    <Managed Condition="!HasTrailingSlash('$(Managed)')">$(Managed)\</Managed>
+  </PropertyGroup>
+
+  <Target Name="CheckOC2BuildInputs" BeforeTargets="ResolveAssemblyReferences;CoreCompile">
+    <Error Condition="'$(GameDir)' == '' And '$(Managed)' == '\'" Text="GameDir is not set. Use: dotnet build -c Release /p:GameDir=&quot;C:\path\to\Overcooked! 2&quot; (or set OC2_GAMEDIR)." />
+    <Error Condition="!Exists('$(Managed)Assembly-CSharp.dll')" Text="Assembly-CSharp.dll not found in '$(Managed)'. Check GameDir." />
+    <Error Condition="!Exists('$(BepInExCore)BepInEx.dll')" Text="BepInEx.dll not found in '$(BepInExCore)'. Install BepInEx 5.4.23.5 x64 into the game folder first (scripts\install.ps1) or pass /p:BepInExCore=." />
+  </Target>
+</Project>
